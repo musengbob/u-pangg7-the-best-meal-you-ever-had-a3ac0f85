@@ -20,9 +20,13 @@ const GATE_MAX_CHARS = 200;
 const ENTRY_LINE =
   "My grandmother's rendang, eaten cross-legged on the kitchen floor at midnight, the coconut milk still bubbling, and nobody speaking because the food was doing all the talking.";
 
-/** Build the entry text, enforcing the gate before anything is written. */
-function buildEntryLine(): string {
-  const line = ENTRY_LINE;
+/**
+ * Validate one entry line against the gate.
+ *
+ * Separated from buildEntryLine so the gate rule lives in exactly one
+ * place and can be unit-checked without touching the file writer.
+ */
+function validateEntryLine(line: string): void {
   if (line.length === 0 || line.length > GATE_MAX_CHARS) {
     throw new Error(
       `entry must be 1 to ${GATE_MAX_CHARS} characters, got ${line.length}`,
@@ -31,7 +35,26 @@ function buildEntryLine(): string {
   if (line.trim().length === 0) {
     throw new Error("entry must not be only white space");
   }
+  if (!line.endsWith(".")) {
+    throw new Error("entry must be a single complete sentence");
+  }
+}
+
+/** Build the entry text, enforcing the gate before anything is written. */
+function buildEntryLine(): string {
+  const line = ENTRY_LINE;
+  validateEntryLine(line);
   return line;
+}
+
+/**
+ * Write the validated entry line to disk, creating the output
+ * directory first. The write is byte-exact: no trailing newline,
+ * no extra whitespace.
+ */
+function writeEntryFile(outPath: string, line: string): void {
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, line, "utf8");
 }
 
 /**
@@ -61,13 +84,21 @@ function resolveOutputPath(): string {
   return resolve(dirname(new URL(import.meta.url).pathname), "output", "entry.txt");
 }
 
+/**
+ * Count the words in the entry line, for the run summary.
+ * Splits on runs of whitespace so extra spacing never inflates the count.
+ */
+function entryWordCount(line: string): number {
+  return line.trim().split(/\s+/).filter(Boolean).length;
+}
+
 function main(): void {
   const line = buildEntryLine();
   const outPath = resolveOutputPath();
-  mkdirSync(dirname(outPath), { recursive: true });
-  // Byte-identical entry text: no trailing newline, no extra whitespace.
-  writeFileSync(outPath, line, "utf8");
-  console.log(`wrote ${line.length} characters to ${outPath}`);
+  writeEntryFile(outPath, line);
+  console.log(
+    `wrote ${line.length} characters (${entryWordCount(line)} words) to ${outPath}`,
+  );
 }
 
 main();
